@@ -5,14 +5,14 @@ class GenericImage[@specialized(Double, Int, Boolean) Elem](val width: Int, val 
   require(width > 0, "width must be > 0")
   require(height > 0, "height must be > 0")
 
-  private val buffer = new Array[Elem](width * height)
+  private final val buffer = new Array[Elem](width * height)
 
   // no bounds checking for speed
   
-  def get(x: Int, y: Int): Elem = 
+  final def get(x: Int, y: Int): Elem = 
     buffer(y * width + x)
 
-  def set(x: Int, y: Int, value: Elem): Unit =
+  final def set(x: Int, y: Int, value: Elem): Unit =
     buffer(y * width + x) = value
 
   def combine[ThatElem, ResElem : ClassManifest](that: GenericImage[ThatElem])(f: (Elem, ThatElem) => ResElem): GenericImage[ResElem] = {

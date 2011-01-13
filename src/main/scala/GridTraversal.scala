@@ -9,7 +9,7 @@ trait GridTraversal {
    *   // do something  
    * }
    */
-  @inline final def traverseGrid(x: Int, y: Int)(f: (Int, Int) => Unit): Unit = {
+  final def traverseGrid(x: Int, y: Int)(f: (Int, Int) => Unit): Unit = {
     var i = 0
     while (i < x) {
       var j = 0
@@ -27,7 +27,7 @@ trait GridTraversal {
    *   // yield something  
    * }
    */
-  @inline final def mapGrid[Elem](x: Int, y: Int)(f: (Int, Int) => Elem): Seq[Elem] = {
+  final def mapGrid[Elem](x: Int, y: Int)(f: (Int, Int) => Elem): Seq[Elem] = {
     val buf = new ArrayBuffer[Elem]
     var i = 0
     while (i < x) {
