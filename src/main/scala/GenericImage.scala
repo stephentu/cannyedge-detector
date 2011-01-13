@@ -34,4 +34,8 @@ class GenericImage[@specialized(Double, Int, Boolean) Elem](val width: Int, val 
     newImg
   }
 
+  def foreachWithIndex(f: (Int, Int, Elem) => Unit): Unit = 
+    for (i <- 0 until width; j <- 0 until height) f(i, j, get(i, j))
+
+  def foreach(f: Elem => Unit): Unit = foreachWithIndex((_, _, e) => f(e))
 }
