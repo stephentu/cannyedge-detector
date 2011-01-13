@@ -28,6 +28,8 @@ class TriPixel[@specialized(Double, Int) N](val r: N, val g: N, val b: N)(implic
     new TriPixel[N](ev.times(r, n), ev.times(g, n), ev.times(b, n))
   def plus(p: TriPixel[N]) =
     new TriPixel[N](ev.plus(r, p.r), ev.plus(g, p.g), ev.plus(b, p.b))
+  override def toString = 
+    "(%s, %s, %s)".format(r.toString, g.toString, b.toString)
 }
 
 class SinglePixel[@specialized(Double, Int) N](val value: N)(implicit ev: Numeric[N]) extends Pixel[SinglePixel, N] {
@@ -35,4 +37,6 @@ class SinglePixel[@specialized(Double, Int) N](val value: N)(implicit ev: Numeri
     new SinglePixel[N](ev.times(value, n))
   def plus(p: SinglePixel[N]) =
     new SinglePixel[N](ev.plus(value, p.value))
+  override def toString = 
+    "(%s)".format(value.toString)
 }

@@ -56,7 +56,7 @@ class SquareMask[N](side: Int, data: Array[N])(implicit ev: Numeric[N]) {
 
   private val mid = side / 2
 
-  def getData(x: Int, y: Int): N = data(x * side + y)
+  def getData(x: Int, y: Int): N = data(y * side + x)
 
   def evaluate[V[N]](x: Int, y: Int, img: BufferedImage)(implicit ops: VectorOps[V, N]): V[N] = {
 
@@ -68,9 +68,13 @@ class SquareMask[N](side: Int, data: Array[N])(implicit ev: Numeric[N]) {
     val pxes = for (i <- 0 until side; j <- 0 until side) yield {
       val curX = i - mid + x
       val curY = j - mid + y
-      //println("  curX = %d, curY = %d".format(curX, curY))
-      if (outOfXBounds(curX) || outOfYBounds(curY)) ops.unit 
-      else ops.scale(ops.fromImage(curX, curY, img), getData(i, j))
+
+      val px = 
+        if (outOfXBounds(curX) || outOfYBounds(curY)) ops.unit 
+        else ops.scale(ops.fromImage(curX, curY, img), getData(i, j))
+
+      //println("  curX = %d, curY = %d, px = %s".format(curX, curY, px))
+      px
     }
     pxes.foldLeft(ops.unit) { case (acc, vec) => ops.add(acc, vec) }
     //println("  sum = %s".format(sum))
@@ -79,20 +83,22 @@ class SquareMask[N](side: Int, data: Array[N])(implicit ev: Numeric[N]) {
 
 trait Convolution[V[N], N, Result] {
 
-  protected def newMask(kernel: SquareKernel): SquareMask[N]
+  val kernel: SquareKernel
+
+  protected def newMask: SquareMask[N]
   protected def newResult(img: BufferedImage): Result
 
   protected def update(x: Int, y: Int, agg: V[N], canvas: Result): Unit
   protected def widthOf(canvas: Result): Int
   protected def heightOf(canvas: Result): Int
 
-  def apply(img: BufferedImage, kernel: SquareKernel): Result = convolve(img, kernel)
+  def apply(img: BufferedImage): Result = convolve(img)
 
   protected implicit def ops: VectorOps[V, N]
 
-  def convolve(img: BufferedImage, kernel: SquareKernel): Result = {
+  def convolve(img: BufferedImage): Result = {
     val canvas = newResult(img)
-    val mask   = newMask(kernel)
+    val mask   = newMask
     for (x <- 0 until widthOf(canvas); y <- 0 until heightOf(canvas)) {
       update(x, y, mask.evaluate[V](x, y, img), canvas)
     }
@@ -108,7 +114,7 @@ trait GaussConvolution[Px[Double] <: Pixel[Px, Double]] extends Convolution[Px, 
     1.0 / (2.0 * math.Pi * sigma_2) * math.exp( - (x*x + y*y).toDouble / (2.0 * sigma_2) ) 
   }
 
-  def newMask(kernel: SquareKernel) = {
+  def newMask = {
     val mid = kernel.side / 2
     kernel.computeMask((x,y) => gauss(math.abs(x - mid), math.abs(y - mid)))
     // identity mask (1 at mid, 0 elsewhere)
@@ -119,7 +125,7 @@ trait GaussConvolution[Px[Double] <: Pixel[Px, Double]] extends Convolution[Px, 
   def heightOf(img: BufferedImage) = img.getHeight
 }
 
-class RGBGaussConvolution(val sigma: Double) extends GaussConvolution[TriPixel] {
+class RGBGaussConvolution(val sigma: Double, val kernel: SquareKernel) extends GaussConvolution[TriPixel] {
   def ops = implicitly[VectorOps[TriPixel, Double]]
 
   def newResult(img: BufferedImage) = 
@@ -132,7 +138,7 @@ class RGBGaussConvolution(val sigma: Double) extends GaussConvolution[TriPixel] 
   }
 }
 
-class GrayscaleGaussConvolution(val sigma: Double) extends GaussConvolution[SinglePixel] {
+class GrayscaleGaussConvolution(val sigma: Double, val kernel: SquareKernel) extends GaussConvolution[SinglePixel] {
   def ops = implicitly[VectorOps[SinglePixel, Double]]
 
   def newResult(img: BufferedImage) = 
@@ -149,7 +155,7 @@ trait SobelOperator extends Convolution[SinglePixel, Double, GenericImage[Double
   def newResult(img: BufferedImage) =
     new GenericImage[Double](img.getWidth, img.getHeight)
 
-  def update(x: Int, y: Int, agg: SinglePixel[Double], canvas: GenericImage[Double]) = 
+  def update(x: Int, y: Int, agg: SinglePixel[Double], canvas: GenericImage[Double]) =
     canvas.set(x, y, agg.value)
 
   def widthOf(canvas: GenericImage[Double]) = canvas.width
@@ -162,10 +168,8 @@ object SobelOperatorX extends SobelOperator {
           -2.0, 0.0, 2.0,
           -1.0, 0.0, 1.0)
   object sobelMaskX extends SquareMask[Double](3, sobelMaskXData) 
-  def newMask(kernel: SquareKernel) = {
-    assert(kernel.side == 3, "Sobel requires a 3x3 kernel")
-    sobelMaskX
-  }
+  val kernel = DefaultSobelKernel
+  val newMask = sobelMaskX
 }
 
 object SobelOperatorY extends SobelOperator {
@@ -174,8 +178,6 @@ object SobelOperatorY extends SobelOperator {
            0.0,  0.0,  0.0,
           -1.0, -2.0, -1.0)
   object sobelMaskY extends SquareMask[Double](3, sobelMaskYData) 
-  def newMask(kernel: SquareKernel) = {
-    assert(kernel.side == 3, "Sobel requires a 3x3 kernel")
-    sobelMaskY
-  }
+  val kernel = DefaultSobelKernel
+  val newMask = sobelMaskY
 }

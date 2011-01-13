@@ -18,12 +18,12 @@ object EdgeDetector {
       else img
 
     // apply gaussian blur on grayscaled image
-    val gaussian = new GrayscaleGaussConvolution(1.6)
-    val blurredImg = gaussian.convolve(grayImg, DefaultSquareKernel)
+    val gaussian = new GrayscaleGaussConvolution(1.6, DefaultSquareKernel)
+    val blurredImg = gaussian.convolve(grayImg)
 
     // apply sobel operator
-    val gx = SobelOperatorX.convolve(blurredImg, DefaultSobelKernel)
-    val gy = SobelOperatorY.convolve(blurredImg, DefaultSobelKernel)
+    val gx = SobelOperatorX.convolve(blurredImg)
+    val gy = SobelOperatorY.convolve(blurredImg)
     val g = gx.combine(gy)((l, r) => math.sqrt(l*l + r*r)) 
 
     // compute angles
@@ -51,7 +51,7 @@ object EdgeDetector {
     val directions = theta.map(th => canonicalAngleToDirection(canonicalAngle(th)))
 
     def safeGet(x: Int, y: Int) = 
-      if (x < 0 || x > g.width || y < 0 || y > g.height) None
+      if (x < 0 || x >= g.width || y < 0 || y >= g.height) None
       else Some(g.get(x, y))
 
     // apply non-maximum suppression

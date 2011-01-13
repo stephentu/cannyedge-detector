@@ -10,10 +10,10 @@ class GenericImage[@specialized(Double, Int, Boolean) Elem](val width: Int, val 
   // no bounds checking for speed
   
   def get(x: Int, y: Int): Elem = 
-    buffer(x * width + height)
+    buffer(y * width + x)
 
-  def set(x: Int, y: Int, value: Elem): Unit = 
-    buffer(x * width + height) = value
+  def set(x: Int, y: Int, value: Elem): Unit =
+    buffer(y * width + x) = value
 
   def combine[ThatElem, ResElem : ClassManifest](that: GenericImage[ThatElem])(f: (Elem, ThatElem) => ResElem): GenericImage[ResElem] = {
     // TODO: relax assumption
@@ -38,4 +38,9 @@ class GenericImage[@specialized(Double, Int, Boolean) Elem](val width: Int, val 
     for (i <- 0 until width; j <- 0 until height) f(i, j, get(i, j))
 
   def foreach(f: Elem => Unit): Unit = foreachWithIndex((_, _, e) => f(e))
+
+  def to2DArray: Array[Array[Elem]] = 
+    (0 until height).map(i => buffer.slice(i * height, i * height + width).toArray).toArray
+
+  def toArray: Array[Elem] = buffer.clone
 }
