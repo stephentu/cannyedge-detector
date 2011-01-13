@@ -1,12 +1,13 @@
 package com.stephentu
 
 import java.awt.image._
+import collection.mutable.ArrayBuffer
 
-case class SquareKernel(side: Int) {
+case class SquareKernel(side: Int) extends GridTraversal {
   require(side > 0, "SquareKernel requires positive side")
 
   def computeMask[N](f: (Int, Int) => N)(implicit ev: Numeric[N], m: ClassManifest[N]): SquareMask[N] = {
-    val data = for (i <- 0 until side; j <- 0 until side) yield f(i, j)
+    val data = mapGrid(side, side)(f) 
     new SquareMask[N](side, data.toArray) 
   }
 }
@@ -50,7 +51,7 @@ class TriPixelOps[N](implicit ev: Numeric[N]) extends PixelVectorOps[TriPixel, N
   }
 }
 
-class SquareMask[N](side: Int, data: Array[N])(implicit ev: Numeric[N]) {
+class SquareMask[N](side: Int, data: Array[N])(implicit ev: Numeric[N]) extends GridTraversal {
   require(side > 0, "SquareMask requires positive side")
   require(data.length == side * side, "data not filled out")
 
@@ -60,28 +61,22 @@ class SquareMask[N](side: Int, data: Array[N])(implicit ev: Numeric[N]) {
 
   def evaluate[V[N]](x: Int, y: Int, img: BufferedImage)(implicit ops: VectorOps[V, N]): V[N] = {
 
-    //println("eval (%d, %d)".format(x, y))
+    @inline def outOfXBounds(pos: Int) = pos < 0 || pos >= img.getWidth
+    @inline def outOfYBounds(pos: Int) = pos < 0 || pos >= img.getHeight
 
-    def outOfXBounds(pos: Int) = pos < 0 || pos >= img.getWidth
-    def outOfYBounds(pos: Int) = pos < 0 || pos >= img.getHeight
-
-    val pxes = for (i <- 0 until side; j <- 0 until side) yield {
+    val pxes = mapGrid(side, side)((i, j) => {
       val curX = i - mid + x
       val curY = j - mid + y
 
-      val px = 
-        if (outOfXBounds(curX) || outOfYBounds(curY)) ops.unit 
-        else ops.scale(ops.fromImage(curX, curY, img), getData(i, j))
+      if (outOfXBounds(curX) || outOfYBounds(curY)) ops.unit 
+      else ops.scale(ops.fromImage(curX, curY, img), getData(i, j))
+    })
 
-      //println("  curX = %d, curY = %d, px = %s".format(curX, curY, px))
-      px
-    }
     pxes.foldLeft(ops.unit) { case (acc, vec) => ops.add(acc, vec) }
-    //println("  sum = %s".format(sum))
   }
 }
 
-trait Convolution[V[N], N, Result] {
+trait Convolution[V[N], N, Result] extends GridTraversal {
 
   val kernel: SquareKernel
 
@@ -99,9 +94,7 @@ trait Convolution[V[N], N, Result] {
   def convolve(img: BufferedImage): Result = {
     val canvas = newResult(img)
     val mask   = newMask
-    for (x <- 0 until widthOf(canvas); y <- 0 until heightOf(canvas)) {
-      update(x, y, mask.evaluate[V](x, y, img), canvas)
-    }
+    traverseGrid(widthOf(canvas), heightOf(canvas))((x, y) => update(x, y, mask.evaluate[V](x, y, img), canvas))
     canvas
   }
 }
@@ -117,8 +110,6 @@ trait GaussConvolution[Px[Double] <: Pixel[Px, Double]] extends Convolution[Px, 
   def newMask = {
     val mid = kernel.side / 2
     kernel.computeMask((x,y) => gauss(math.abs(x - mid), math.abs(y - mid)))
-    // identity mask (1 at mid, 0 elsewhere)
-    //kernel.computeMask((x, y) => if (x == mid && y == mid) 1.0 else 0.0)
   }
 
   def widthOf(img: BufferedImage) = img.getWidth

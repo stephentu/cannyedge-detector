@@ -23,7 +23,15 @@ object TestApp {
     val edges = EdgeDetector.detectEdges(inImg)
     val outImg = visualize(edges)
 
-    // TODO: use extension of file name
-    ImageIO.write(outImg, "png", new File(outFile))
+    val ExtRgx = "^.+\\.(\\w+)$".r 
+    val optExt = outFile match {
+      case ExtRgx(ext) => Some(ext)
+      case _ => None
+    }
+
+    if (optExt.isEmpty)
+      System.err.println("Saving outfile as default extension png")
+    
+    ImageIO.write(outImg, optExt.getOrElse("png"), new File(outFile))
   }
 }
