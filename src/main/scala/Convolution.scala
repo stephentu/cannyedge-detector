@@ -1,7 +1,6 @@
 package com.stephentu
 
 import java.awt.image._
-import collection.mutable.ArrayBuffer
 
 case class SquareKernel(side: Int) extends GridTraversal {
   require(side > 0, "SquareKernel requires positive side")
