@@ -14,7 +14,7 @@ object TriPixel {
   }
 }
 
-trait Pixel[Repr[Number], Number] {
+trait Pixel[Repr[Number], @specialized(Double, Int) Number] {
   def scale(n: Number): Repr[Number]
   def plus(that: Repr[Number]): Repr[Number]
 
@@ -22,7 +22,7 @@ trait Pixel[Repr[Number], Number] {
   def +(that: Repr[Number]): Repr[Number] = plus(that)
 }
 
-class TriPixel[N](val r: N, val g: N, val b: N)(implicit ev: Numeric[N]) 
+class TriPixel[@specialized(Double, Int) N](val r: N, val g: N, val b: N)(implicit ev: Numeric[N]) 
   extends Pixel[TriPixel, N] {
   def scale(n: N) = 
     new TriPixel[N](ev.times(r, n), ev.times(g, n), ev.times(b, n))
@@ -30,7 +30,7 @@ class TriPixel[N](val r: N, val g: N, val b: N)(implicit ev: Numeric[N])
     new TriPixel[N](ev.plus(r, p.r), ev.plus(g, p.g), ev.plus(b, p.b))
 }
 
-class SinglePixel[N](val value: N)(implicit ev: Numeric[N]) extends Pixel[SinglePixel, N] {
+class SinglePixel[@specialized(Double, Int) N](val value: N)(implicit ev: Numeric[N]) extends Pixel[SinglePixel, N] {
   def scale(n: N) = 
     new SinglePixel[N](ev.times(value, n))
   def plus(p: SinglePixel[N]) =

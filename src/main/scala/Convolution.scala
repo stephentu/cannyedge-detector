@@ -14,6 +14,9 @@ case class SquareKernel(side: Int) {
 /** 5x5 kernel */
 object DefaultSquareKernel extends SquareKernel(5)
 
+/** 3x3 kernel */
+object DefaultSobelKernel extends SquareKernel(3)
+
 trait VectorOps[V[N], N] {
   def unit: V[N]
   def fromImage(x: Int, y: Int, img: BufferedImage): V[N]
@@ -97,13 +100,13 @@ trait Convolution[V[N], N, Result] {
   }
 }
 
-class GaussConvolution(val sigma: Double) extends Convolution[TriPixel, Double, BufferedImage] {
+trait GaussConvolution[Px[Double] <: Pixel[Px, Double]] extends Convolution[Px, Double, BufferedImage] {
+  val sigma: Double
+
   private def gauss(x: Int, y: Int): Double = {
     val sigma_2 = sigma * sigma
     1.0 / (2.0 * math.Pi * sigma_2) * math.exp( - (x*x + y*y).toDouble / (2.0 * sigma_2) ) 
   }
-
-  def ops = implicitly[VectorOps[TriPixel, Double]]
 
   def newMask(kernel: SquareKernel) = {
     val mid = kernel.side / 2
@@ -111,6 +114,13 @@ class GaussConvolution(val sigma: Double) extends Convolution[TriPixel, Double, 
     // identity mask (1 at mid, 0 elsewhere)
     //kernel.computeMask((x, y) => if (x == mid && y == mid) 1.0 else 0.0)
   }
+
+  def widthOf(img: BufferedImage) = img.getWidth
+  def heightOf(img: BufferedImage) = img.getHeight
+}
+
+class RGBGaussConvolution(val sigma: Double) extends GaussConvolution[TriPixel] {
+  def ops = implicitly[VectorOps[TriPixel, Double]]
 
   def newResult(img: BufferedImage) = 
     new BufferedImage(img.getWidth, img.getHeight, BufferedImage.TYPE_INT_ARGB)
@@ -120,20 +130,52 @@ class GaussConvolution(val sigma: Double) extends Convolution[TriPixel, Double, 
       px.b.toInt | (px.g.toInt << 8) | (px.r.toInt << 16) | (0xff << 24)
     canvas.setRGB(x, y, toIntRepr(agg))
   }
-
-  def widthOf(img: BufferedImage) = img.getWidth
-  def heightOf(img: BufferedImage) = img.getHeight
 }
 
-trait SobelOperator extends Convolution[SinglePixel, Double, GenericImage] {
+class GrayscaleGaussConvolution(val sigma: Double) extends GaussConvolution[SinglePixel] {
+  def ops = implicitly[VectorOps[SinglePixel, Double]]
+
+  def newResult(img: BufferedImage) = 
+    new BufferedImage(img.getWidth, img.getHeight, BufferedImage.TYPE_BYTE_GRAY)
+
+  def update(x: Int, y: Int, agg: SinglePixel[Double], canvas: BufferedImage) = {
+    canvas.getRaster.setSample(x, y, 0, agg.value.toInt)
+  }
+}
+
+trait SobelOperator extends Convolution[SinglePixel, Double, GenericImage[Double]] {
   def ops = implicitly[VectorOps[SinglePixel, Double]]
 
   def newResult(img: BufferedImage) =
-    new GenericImage(img.getWidth, img.getHeight)
+    new GenericImage[Double](img.getWidth, img.getHeight)
 
-  def update(x: Int, y: Int, agg: SinglePixel[Double], canvas: GenericImage) = 
+  def update(x: Int, y: Int, agg: SinglePixel[Double], canvas: GenericImage[Double]) = 
     canvas.set(x, y, agg.value)
 
-  def widthOf(canvas: GenericImage) = canvas.width
-  def heightOf(canvas: GenericImage) = canvas.height
+  def widthOf(canvas: GenericImage[Double]) = canvas.width
+  def heightOf(canvas: GenericImage[Double]) = canvas.height
+}
+
+object SobelOperatorX extends SobelOperator {
+  private val sobelMaskXData = 
+    Array(-1.0, 0.0, 1.0,
+          -2.0, 0.0, 2.0,
+          -1.0, 0.0, 1.0)
+  object sobelMaskX extends SquareMask[Double](3, sobelMaskXData) 
+  def newMask(kernel: SquareKernel) = {
+    assert(kernel.side == 3, "Sobel requires a 3x3 kernel")
+    sobelMaskX
+  }
+}
+
+object SobelOperatorY extends SobelOperator {
+  private val sobelMaskYData = 
+    Array( 1.0,  2.0,  1.0,
+           0.0,  0.0,  0.0,
+          -1.0, -2.0, -1.0)
+  object sobelMaskY extends SquareMask[Double](3, sobelMaskYData) 
+  def newMask(kernel: SquareKernel) = {
+    assert(kernel.side == 3, "Sobel requires a 3x3 kernel")
+    sobelMaskY
+  }
 }

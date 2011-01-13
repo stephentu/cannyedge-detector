@@ -12,7 +12,7 @@ object TestApp {
     val inFile = args(0)
     val outFile = args(1)
     val inImg = ImageIO.read(new File(inFile))
-    val outImg = (new GaussConvolution(1.6)).convolve(inImg, DefaultSquareKernel)
+    val outImg = (new RGBGaussConvolution(1.6)).convolve(inImg, DefaultSquareKernel)
     // TODO: use extension of file name
     ImageIO.write(outImg, "png", new File(outFile))
   }
