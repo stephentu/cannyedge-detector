@@ -1,0 +1,9 @@
+#!/bin/sh
+APPDIR=`dirname $0`
+CAPPDIR=`readlink -f $APPDIR`
+BASE=`dirname $CAPPDIR`
+SCALA_DIR=$BASE/project/boot/scala-2.8.1/lib
+TARGET_DIR=$BASE/target/scala_2.8.1/classes
+CLASSPATH=$SCALA_DIR/scala-library.jar:$SCALA_DIR/scala-compiler.jar:$TARGET_DIR
+JAVA_OPTS=""
+java $JAVA_OPTS -classpath $CLASSPATH com.stephentu.EdgeDetectApp $@
