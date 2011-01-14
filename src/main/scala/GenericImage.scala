@@ -41,4 +41,34 @@ class GenericImage[@specialized(Double, Int, Boolean) Elem](val width: Int, val 
     (0 until height).map(i => buffer.slice(i * height, i * height + width).map(_.asInstanceOf[SuperElem]).toArray).toArray
 
   def toArray[SuperElem >: Elem : ClassManifest]: Array[SuperElem] = buffer.map(_.asInstanceOf[SuperElem]).toArray
+
+  /**
+   * Returns a slice of this image from (xUpper, yUpper) to (xLower, yLower)
+   * (inclusive)
+   */
+  def subregion[SuperElem >: Elem](xUpper: Int, yUpper: Int, xLower: Int, yLower: Int): GenericImage[SuperElem] = {
+
+    @inline def isOOBX(x: Int) = x < 0 || x >= width
+    @inline def isOOBY(y: Int) = y < 0 || y >= height
+
+    require(!isOOBX(xUpper) && !isOOBX(xLower))
+    require(!isOOBY(yUpper) && !isOOBY(yLower))
+    require(xUpper <= xLower && yUpper <= yLower)
+
+    val subWidth = xLower - xUpper
+    val subHeight = yLower - yUpper
+    val img = new GenericImage[SuperElem](subWidth, subHeight)
+    traverseGrid(xUpper, yUpper, xLower+1, yLower+1)((i, j) => img.set(i, j, get(i, j)))
+    img
+  }
+
+  def count(p: Elem => Boolean): Int = 
+    countWithIndex((_, _, e) => p(e))
+
+  def countWithIndex(p: (Int, Int, Elem) => Boolean): Int = {
+    var cnt = 0
+    foreachWithIndex((x, y, e) => if (p(x, y, e)) cnt += 1)
+    cnt
+  }
+
 }
