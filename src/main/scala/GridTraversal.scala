@@ -5,7 +5,7 @@ import collection.mutable.ArrayBuffer
 trait GridTraversal {
   /**
    * Drop in replacement for
-   * for (i <- 0 until x; j <- 0 until y) { 
+   * for (j <- 0 until y; i <- 0 until x) { 
    *   // do something  
    * }
    */
@@ -14,25 +14,25 @@ trait GridTraversal {
 
   /**
    * Drop in replacement for
-   * for (i <- xStart until xFinish; j <- yStart until yFinish) { 
+   * for (j <- yStart until yFinish; i <- xStart until xFinish) { 
    *   // do something  
    * }
    */
   final def traverseGrid[A](xStart: Int, yStart: Int, xFinish: Int, yFinish: Int)(f: (Int, Int) => A): Unit = {
-    var i = xStart 
-    while (i < xFinish) {
-      var j = yStart 
-      while (j < yFinish) {
+    var j = yStart 
+    while (j < yFinish) {
+      var i = xStart 
+      while (i < xFinish) {
         f(i, j)
-        j += 1
+        i += 1
       }
-      i += 1
+      j += 1
     }
   }
 
   /**
    * Drop in replacement for
-   * val elems = for (i <- 0 until x; j <- 0 until y) yield { 
+   * val elems = for (j <- 0 until y; i <- 0 until x) yield { 
    *   // yield something  
    * }
    */
@@ -41,20 +41,20 @@ trait GridTraversal {
 
   /**
    * Drop in replacement for
-   * val elems = for (i <- xStart until xFinish; j <- yStart until yFinish) yield { 
+   * val elems = for (j <- yStart until yFinish; i <- xStart until xFinish) yield { 
    *   // yield something  
    * }
    */
   final def mapGrid[Elem](xStart: Int, yStart: Int, xFinish: Int, yFinish: Int)(f: (Int, Int) => Elem): Seq[Elem] = {
     val buf = new ArrayBuffer[Elem]
-    var i = xStart 
-    while (i < xFinish) {
-      var j = yStart 
-      while (j < yFinish) {
+    var j = yStart 
+    while (j < yFinish) {
+      var i = xStart 
+      while (i < xFinish) {
         buf += f(i, j)
-        j += 1
+        i += 1
       }
-      i += 1
+      j += 1
     }
     buf
   }

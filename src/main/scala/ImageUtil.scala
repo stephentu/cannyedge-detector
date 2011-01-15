@@ -12,4 +12,19 @@ object ImageUtil extends GridTraversal {
     })
     gs
   }
+  def toImage[N : Numeric](width: Int, height: Int, data: Array[N]): BufferedImage = {
+    require(width * height == data.length)
+    val img = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY)
+    val ev = implicitly[Numeric[N]]
+    traverseGrid(width, height)((i, j) => img.getRaster.setSample(i, j, 0, ev.toInt(data(j * width + i))))
+    img
+  }
+  def toImage[N : Numeric](data: Array[Array[N]]): BufferedImage = {
+    require(data.isEmpty || data.map(_.length).toSet.size == 1, "rows all need same length")
+    val width = if (data.isEmpty) 0 else data(0).length
+    val img = new BufferedImage(width, data.length, BufferedImage.TYPE_BYTE_GRAY)
+    val ev = implicitly[Numeric[N]]
+    traverseGrid(width, data.length)((i, j) => img.getRaster.setSample(i, j, 0, ev.toInt(data(j)(i))))
+    img
+  }
 }

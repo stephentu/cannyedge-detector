@@ -1,23 +1,47 @@
 package com.stephentu
 
 import java.awt.image._
-import annotation._
+import java.io._
+import javax.imageio._
+
+import collection.mutable.HashSet
 
 object EdgeDetector extends GridTraversal {
 
-  sealed abstract class Direction(val angle: Double)
-  case object Zero extends Direction(0.0)
-  case object FortyFive extends Direction(math.Pi / 4.0)
-  case object Ninety extends Direction(math.Pi / 2.0)
-  case object OneThirtyFive extends Direction(3.0 / 4.0 * math.Pi)
+  // for non-max suppression part
+  private sealed abstract class Direction(val angle: Double)
+  private case object Zero extends Direction(0.0)
+  private case object FortyFive extends Direction(math.Pi / 4.0)
+  private case object Ninety extends Direction(math.Pi / 2.0)
+  private case object OneThirtyFive extends Direction(3.0 / 4.0 * math.Pi)
 
-  private val Tlow = 25.0
-  private val Thigh = 35.0
+  // for hystersis part
+  private sealed trait EdgeType
+  private case object NoEdge extends EdgeType
+  private case object WeakEdge extends EdgeType
+  private case object StrongEdge extends EdgeType
 
-  /** most likely should not turn thresholding off, but the option is here */
-  private val DoThresholding = true
+  private val Debug = util.Properties.propOrFalse("canny.debug")
 
-  def detectEdges(img: BufferedImage): GenericImage[Boolean] = {
+  private def sobel(img: BufferedImage): (GenericImage[Double], GenericImage[Double]) = {
+    assert(img.getRaster.getNumBands == 1, "grayscale img only")
+
+    // apply sobel operator
+    val gx = SobelOperatorX.convolve(img)
+    val gy = SobelOperatorY.convolve(img)
+    val g = gx.combine(gy)((l, r) => math.sqrt(l*l + r*r)) 
+
+    // compute angles
+    val theta = gx.combine(gy)((l, r) => {
+      val res = math.atan(r / l)
+      if (java.lang.Double.isNaN(res)) 0.0 else res
+    })
+
+    (g, theta)
+  }
+
+  def detectEdges(img: BufferedImage, thresholds: Option[(Double, Double)] = None): GenericImage[Boolean] = {
+    thresholds.foreach { case (low, high) => require(low <= high, "invalid thresholds given") }
 
     // this implementation is based off of:
     // http://www.cs.uiowa.edu/~cwyman/classes/spring08-22C251/homework/canny.pdf
@@ -31,25 +55,16 @@ object EdgeDetector extends GridTraversal {
     val gaussian = new GrayscaleGaussConvolution(1.6, DefaultSquareKernel)
     val blurredImg = gaussian.convolve(grayImg)
 
-    // apply sobel operator
-    val gx = SobelOperatorX.convolve(blurredImg)
-    val gy = SobelOperatorY.convolve(blurredImg)
-    val g = gx.combine(gy)((l, r) => math.sqrt(l*l + r*r)) 
+    // apply sobel operator for image gradients
+    val (g, theta) = sobel(blurredImg)
 
-    // compute angles
-    val theta = gx.combine(gy)((l, r) => {
-      if (l == 0.0) {
-        if (r == 0.0) 0.0
-        else math.Pi / 2.0
-      } else math.atan(r / l)
-    })
+    if (Debug)
+      ImageIO.write(ImageVisualizer.visualize(g), "png", new File("debug_gradient.png"))
 
-    @tailrec def canonicalAngle(th: Double): Double = 
-      if (th >= math.Pi) canonicalAngle(th - math.Pi)
-      else if (th < 0.0) canonicalAngle(th + math.Pi)
-      else th
+    @inline def canonicalAngle(th: Double): Double = 
+      if (th < 0.0) th + math.Pi else th
 
-    def canonicalAngleToDirection(th: Double): Direction = 
+    @inline def canonicalAngleToDirection(th: Double): Direction = 
       if (0.0 <= th && th < (math.Pi / 8.0)) Zero
       else if ((math.Pi / 8.0) <= th && th < (math.Pi * (3.0/8.0))) FortyFive
       else if ((math.Pi * (3.0/8.0)) <= th && th < (math.Pi * (5.0/8.0))) Ninety 
@@ -75,73 +90,90 @@ object EdgeDetector extends GridTraversal {
       case OneThirtyFive =>
         (safeGet(x+1, y-1), safeGet(x-1, y+1))
     })).map { case (center, (leftOpt, rightOpt)) =>
-      val isLeftBigger = leftOpt.map(_ > center)
-      val isRightBigger = rightOpt.map(_ > center)
-      !isLeftBigger.getOrElse(false) && !isRightBigger.getOrElse(false)
+      val isLeftSmaller = leftOpt.map(_ < center)
+      val isRightSmaller = rightOpt.map(_ < center)
+      isLeftSmaller.getOrElse(false) && isRightSmaller.getOrElse(false)
     }
 
-    // thresholding
-    if (DoThresholding)
-      initialGrid.mapWithIndex {
-        case (x, y, true) => 
-          val thisGrad = g.get(x, y)
-          if (thisGrad < Tlow) false
-          else if (Tlow <= thisGrad && thisGrad <= Thigh) {
-            import math._
-            // look @ 3x3 grid around (x, y)
-            val xUpper = max(0, x - 1)
-            val yUpper = max(0, y - 1)
-            val xLower = min(initialGrid.width - 1, x + 1)
-            val yLower = min(initialGrid.height - 1, y + 1)
-
-            var keep = false
-            var canDoLargerSearch = false
-
-            @inline def notCurrentPos(xp: Int, yp: Int) = xp != x && yp != y
-            @inline def exceedsThigh(gval: Double) = gval > Thigh
-            @inline def inBetweenTlowAndThigh(gval: Double) = Tlow <= gval && gval <= Thigh
-
-            traverseGrid(xUpper, yUpper, xLower + 1, yLower + 1) {
-              case (xp, yp) 
-                if !keep && notCurrentPos(xp, yp) && exceedsThigh(g.get(xp, yp)) => 
-                  keep = true
-              case (xp, yp) 
-                if !keep && !canDoLargerSearch && notCurrentPos(xp, yp) && inBetweenTlowAndThigh(g.get(xp, yp)) =>
-                  canDoLargerSearch = true
-              case _ => // no-op
-            }
-
-            if (keep) true
-            else if (canDoLargerSearch) {
-              // look @ 5x5 grid around (x, y)
-              // since we already looked at the 3x3 grid around (x, y) and we
-              // didn't keep, then we know we only need to look at the pixels on
-              // the edge of the 5x5 region
-              val xUpper = max(0, x - 2)
-              val yUpper = max(0, y - 2)
-              val xLower = min(initialGrid.width - 1, x + 2)
-              val yLower = min(initialGrid.height - 1, y + 2)
-
-              @inline def onBoundary(xp: Int, yp: Int) = 
-                xp == xUpper || xp == xLower || yp == yUpper || yp == yLower
-
-              traverseGrid(xUpper, yUpper, xLower + 1, yLower + 1) {
-                case (xp, yp) 
-                  if !keep && onBoundary(xp, yp) /*&& notCurrentPos(xp, yp)*/ && exceedsThigh(g.get(xp, yp)) => 
-                    // we omit notCurrentPos b/c we already check to see if its
-                    // on the boundary. the only case where onBoundary returns
-                    // true for the current position is the degenerate case of a
-                    // 1x1 pixel, in which case the problem is not really well
-                    // defined
-                    keep = true
-                case _ => // no-op
-              }
-
-              keep
-            } else false
-          } else true
-        case _ => false
+    if (Debug) {
+      val numEdges = initialGrid.count(identity) 
+      val d = initialGrid.mapWithIndex {
+        case (x, y, true) => g.get(x, y)
+        case (x, y, false) => 0.0
       }
-    else initialGrid
+      System.err.println("numEdges = %d".format(numEdges))
+      ImageIO.write(ImageVisualizer.visualize(d), "png", new File("debug_d.png"))
+    }
+
+    // thresholding (hystersis)
+    val hist = new Histogram[Double](initialGrid.mapWithIndex {
+      case (x, y, true) => Some(g.get(x, y))
+      case (x, y, false) => None
+    }.toArray.flatMap(_.toList).toArray)
+
+    val (thigh, tlow) = thresholds.map { case (low, high) => (high, low) }.getOrElse {
+      val Thigh = hist.percentile(0.85) // 85th percentile of gradients for high threshold
+      val Tlow  = hist.percentile(0.70) // 70th percentile of gradients for low threshold
+      (Thigh, Tlow)
+    }
+
+    if (Debug) {
+      System.err.println("THigh = %f, TLow = %f, max = %f".format(thigh, tlow, hist.max))
+      val sup = initialGrid.mapWithIndex {
+        case (x, y, true) => 
+          if (g.get(x, y) > thigh) 255.0
+          else if (tlow <= g.get(x, y) && g.get(x, y) <= thigh) 127.0
+          else 0.0
+        case _ => 0.0
+      }
+      ImageIO.write(ImageVisualizer.visualize(sup), "png", new File("debug_sup.png"))
+    }
+
+    // TODO: throw error on overflow
+    var counter = 0
+    def freshId(): Int = {
+      val res = counter
+      counter += 1
+      res
+    }
+
+    val edgeGrid = initialGrid.mapWithIndex {
+      case (x, y, true) => 
+        val thisGrad = g.get(x, y)
+        if (thisGrad < tlow) NoEdge
+        else if (tlow <= thisGrad && thisGrad < thigh) WeakEdge
+        else StrongEdge
+      case _ => NoEdge
+    }
+
+    val nodeGrid = new GenericImage[Option[DisjointSet.Node[Int]]](edgeGrid.width, edgeGrid.height)
+
+    // raster connected components algorithm
+    edgeGrid.foreachWithIndex {
+      case (x, y, StrongEdge | WeakEdge) =>
+        // neighbors are other strong/weak edges
+        val coords = List( (x-1, y), (x-1, y-1), (x, y-1), (x+1, y-1) )
+        @inline def isOOB(xp: Int, yp: Int): Boolean =
+          xp < 0 || xp >= nodeGrid.width || yp < 0 || yp >= nodeGrid.height
+        val neighbors = coords.map { case (xp, yp) => if (isOOB(xp, yp)) None else nodeGrid.get(xp, yp) }.flatMap(_.toList)
+        
+        if (neighbors.isEmpty)
+          nodeGrid.set(x, y, Some(DisjointSet.unit(freshId())))
+        else {
+          val thisPx = neighbors.head
+          nodeGrid.set(x, y, Some(thisPx))
+          neighbors.tail.foreach(_.unionWith(thisPx))
+        }
+      case (x, y, NoEdge) =>
+        nodeGrid.set(x, y, None)
+    }
+
+    val strongEdges = new HashSet[Int]
+    edgeGrid.foreachWithIndex((i, j, e) => if (e == StrongEdge) strongEdges += nodeGrid.get(i, j).get.repr.element)
+
+    nodeGrid.map {
+      case Some(node) => strongEdges.contains(node.repr.element)
+      case None => false
+    }
   }
 }

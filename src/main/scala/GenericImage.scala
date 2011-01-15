@@ -2,8 +2,8 @@ package com.stephentu
 
 /** Generic 2D image with double (single) pixels */
 class GenericImage[@specialized(Double, Int, Boolean) Elem](val width: Int, val height: Int) extends GridTraversal {
-  require(width > 0, "width must be > 0")
-  require(height > 0, "height must be > 0")
+  require(width >= 0, "width must be >= 0")
+  require(height >= 0, "height must be >= 0")
 
   private final val buffer = new Array[AnyRef](width * height)
 
@@ -32,15 +32,38 @@ class GenericImage[@specialized(Double, Int, Boolean) Elem](val width: Int, val 
     newImg
   }
 
-  def foreachWithIndex(f: (Int, Int, Elem) => Unit): Unit = 
+  def max[B >: Elem](implicit cmp: Ordering[B]): Elem = {
+    if (isEmpty) 
+      throw new UnsupportedOperationException("Image is empty")
+    foldNatural(get(0, 0))((maxSoFar, elem) => if (cmp.gt(elem, maxSoFar)) elem else maxSoFar)
+  }
+
+  def min[B >: Elem](implicit cmp: Ordering[B]): Elem = {
+    if (isEmpty) 
+      throw new UnsupportedOperationException("Image is empty")
+    foldNatural(get(0, 0))((minSoFar, elem) => if (cmp.lt(elem, minSoFar)) elem else minSoFar)
+  }
+
+  /** Fold, using the ordering of row scanning (same order as foreach) */
+  def foldNatural[B](init: B)(f: (B, Elem) => B): B = {
+    var acc = init
+    foreach(elem => acc = f(acc, elem))
+    acc
+  }
+
+  def isEmpty: Boolean = width == 0 || height == 0
+
+  def foreachWithIndex[A](f: (Int, Int, Elem) => A): Unit = 
     traverseGrid(width, height)((i, j) => f(i, j, get(i, j)))
 
-  def foreach(f: Elem => Unit): Unit = foreachWithIndex((_, _, e) => f(e))
+  def foreach[A](f: Elem => A): Unit = foreachWithIndex((_, _, e) => f(e))
 
   def to2DArray[SuperElem >: Elem : ClassManifest]: Array[Array[SuperElem]] = 
-    (0 until height).map(i => buffer.slice(i * height, i * height + width).map(_.asInstanceOf[SuperElem]).toArray).toArray
+    (0 until height).map(i => buffer.slice(i * width, (i + 1) * width).map(_.asInstanceOf[SuperElem]).toArray).toArray
 
   def toArray[SuperElem >: Elem : ClassManifest]: Array[SuperElem] = buffer.map(_.asInstanceOf[SuperElem]).toArray
+
+  def histogram(implicit ev: Numeric[Elem], cm: ClassManifest[Elem]): Histogram[Elem] = new Histogram[Elem](toArray)
 
   /**
    * Returns a slice of this image from (xUpper, yUpper) to (xLower, yLower)

@@ -164,9 +164,9 @@ object SobelOperatorX extends SobelOperator {
 
 object SobelOperatorY extends SobelOperator {
   private val sobelMaskYData = 
-    Array( 1.0,  2.0,  1.0,
+    Array(-1.0, -2.0, -1.0,
            0.0,  0.0,  0.0,
-          -1.0, -2.0, -1.0)
+           1.0,  2.0,  1.0)
   object sobelMaskY extends SquareMask[Double](3, sobelMaskYData) 
   val kernel = DefaultSobelKernel
   val newMask = sobelMaskY
